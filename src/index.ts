@@ -421,8 +421,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // --- Start ---
 
+// --- Version check ---
+
+const GITHUB_API = "https://api.github.com/repos/zephyrproject-rtos/zephyr/releases/latest";
+
+async function checkLatestVersion(): Promise<string | null> {
+  try {
+    const resp = await fetch(GITHUB_API, {
+      headers: { "Accept": "application/vnd.github.v3+json" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as { tag_name: string };
+    return data.tag_name;
+  } catch {
+    return null;
+  }
+}
+
+// --- Start ---
+
 async function main() {
   loadLatestIndex();
+
+  // Fire-and-forget version check (don't block startup)
+  checkLatestVersion().then((latest) => {
+    if (latest && currentVersion && latest !== currentVersion) {
+      console.error(`[update] New Zephyr release: ${latest} (cached: ${currentVersion})`);
+      console.error(`[update] Run: npx tsx scripts/build-index.ts ${latest} --source /path/to/zephyr`);
+    } else if (latest && !currentVersion) {
+      console.error(`[update] Latest Zephyr release: ${latest}`);
+      console.error(`[update] Run: npx tsx scripts/build-index.ts ${latest} --source /path/to/zephyr`);
+    } else if (latest && latest === currentVersion) {
+      console.error(`[update] Index is up-to-date (${latest})`);
+    }
+  });
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Zephyr MCP server started on stdio");
