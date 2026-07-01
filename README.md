@@ -208,7 +208,3 @@ PRs welcome. Key areas for improvement:
 ## License
 
 MIT
-
----
-
-Built for [Oh My Pi](https://github.com/Aarav-J/personal_hermes) club.
