@@ -53,6 +53,18 @@ export interface DocChunkRow {
   domain: string | null;
 }
 
+export interface SampleRow {
+  id?: number;
+  name: string;
+  description: string | null;
+  path: string | null;
+  prj_conf: string | null;
+  overlay: string | null;
+  boards: string | null; // JSON array
+  category: string | null;
+  doc_url: string | null;
+}
+
 // --- Database Manager ---
 
 export function getCacheDir(): string {
@@ -130,6 +142,20 @@ export class ZephyrDatabase {
         domain TEXT
       );
 
+      -- Samples table
+      CREATE TABLE IF NOT EXISTS samples (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        path TEXT,
+        prj_conf TEXT,
+        overlay TEXT,
+        boards TEXT,
+        category TEXT,
+        doc_url TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_samples_name ON samples(name);
+
       -- FTS indexes
       CREATE VIRTUAL TABLE IF NOT EXISTS functions_fts USING fts5(
         name, signature, brief, description, params,
@@ -152,6 +178,12 @@ export class ZephyrDatabase {
       CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
         title, heading_path, body,
         content='docs_chunks',
+        content_rowid='id'
+      );
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS samples_fts USING fts5(
+        name, description, prj_conf, overlay,
+        content='samples',
         content_rowid='id'
       );
 
@@ -321,6 +353,28 @@ export class ZephyrDatabase {
     txn(rows);
   }
 
+  insertSamplesBatch(rows: SampleRow[]): void {
+    const stmt = this.db.prepare(
+      `INSERT INTO samples (name, description, path, prj_conf, overlay, boards, category, doc_url)
+       VALUES (@name, @description, @path, @prj_conf, @overlay, @boards, @category, @doc_url)`
+    );
+    const txn = this.db.transaction((items: SampleRow[]) => {
+      for (const row of items) {
+        stmt.run({
+          name: row.name,
+          description: row.description ?? null,
+          path: row.path ?? null,
+          prj_conf: row.prj_conf ?? null,
+          overlay: row.overlay ?? null,
+          boards: row.boards ?? null,
+          category: row.category ?? null,
+          doc_url: row.doc_url ?? null,
+        });
+      }
+    });
+    txn(rows);
+  }
+
   // --- FTS rebuild ---
 
   rebuildFts(): void {
@@ -333,6 +387,8 @@ export class ZephyrDatabase {
         SELECT id, compatible, description, properties FROM dt_bindings;
       INSERT INTO docs_fts(rowid, title, heading_path, body)
         SELECT id, title, heading_path, body FROM docs_chunks;
+      INSERT INTO samples_fts(rowid, name, description, prj_conf, overlay)
+        SELECT id, name, description, prj_conf, overlay FROM samples;
     `);
   }
 
@@ -438,6 +494,19 @@ export class ZephyrDatabase {
          LIMIT ?`
       )
       .all(fts, limit) as DocChunkRow[];
+  }
+
+  searchSamples(query: string, limit = 10): SampleRow[] {
+    const fts = this.ftsQuery(query);
+    return this.db
+      .prepare(
+        `SELECT s.* FROM samples_fts ft
+         JOIN samples s ON s.id = ft.rowid
+         WHERE samples_fts MATCH ?
+         ORDER BY rank
+         LIMIT ?`
+      )
+      .all(fts, limit) as SampleRow[];
   }
 
   close(): void {

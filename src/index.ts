@@ -7,7 +7,7 @@ import {
   ErrorCode,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
-import { ZephyrDatabase, getCacheDir, FunctionRow, KconfigRow, DtBindingRow } from "./db.js";
+import { ZephyrDatabase, getCacheDir, FunctionRow, KconfigRow, DtBindingRow, SampleRow } from "./db.js";
 import { existsSync, readdirSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -134,8 +134,8 @@ const SEARCH_DOCS_TOOL = {
       },
       domain: {
         type: "string",
-        description: "Scope: 'api', 'kconfig', 'dt', or omit for all",
-        enum: ["api", "kconfig", "dt"],
+        description: "Scope: 'api', 'kconfig', 'dt', 'sample', or omit for all",
+        enum: ["api", "kconfig", "dt", "sample"],
       },
       limit: {
         type: "number",
@@ -390,6 +390,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             domain: "dt",
             title: r.compatible,
             snippet: r.description ?? "",
+            path: r.path ?? undefined,
+          });
+        }
+      }
+
+      if (!domain || domain === "sample") {
+        const sampleResults = db.searchSamples(query, limit);
+        for (const r of sampleResults as SampleRow[]) {
+          allResults.push({
+            domain: "sample",
+            title: r.name,
+            snippet: r.description ?? r.prj_conf?.slice(0, 100) ?? "",
             path: r.path ?? undefined,
           });
         }

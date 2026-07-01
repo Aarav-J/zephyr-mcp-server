@@ -12,9 +12,9 @@ import { ZephyrDatabase, getCacheDir } from "../src/db.js";
 import { parseDoxygenDirectory } from "../src/parsers/doxygen.js";
 import { parseKconfigTree } from "../src/parsers/kconfig.js";
 import { parseDtBindingsTree } from "../src/parsers/dt-bindings.js";
+import { parseSamplesTree } from "../src/parsers/samples.js";
 import { join } from "node:path";
-import { mkdirSync, existsSync, writeFileSync, rmSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { mkdirSync, existsSync, writeFileSync } from "node:fs";
 
 // --- Helpers ---
 
@@ -125,15 +125,28 @@ async function buildIndex(opts: BuildOptions): Promise<string> {
     }
   }
 
-  // 4. Rebuild FTS indexes
+  // 4. Parse samples
+  let sampleCount = 0;
+  if (sourceDir && existsSync(sourceDir)) {
+    log(`Parsing Zephyr sample apps from: ${sourceDir}`);
+    const sampleRows = parseSamplesTree(sourceDir);
+    if (sampleRows.length > 0) {
+      db.insertSamplesBatch(sampleRows);
+      sampleCount = sampleRows.length;
+      log(`  \u2192 ${sampleCount} samples indexed`);
+    } else {
+      log(`  \u2192 No samples found`);
+    }
+  }
+
+  // 5. Rebuild FTS indexes
   log(`Rebuilding FTS search indexes...`);
   db.rebuildFts();
 
-  // 5. Write metadata
+  // 6. Write metadata
   db.setMeta("version", version);
   db.setMeta("built_at", new Date().toISOString());
 
-  const fnCount = db.getMeta("version") ? "done" : "unknown";
   writeFileSync(
     join(indexDir, "meta.json"),
     JSON.stringify({ version, built_at: new Date().toISOString() }, null, 2)
@@ -144,6 +157,7 @@ async function buildIndex(opts: BuildOptions): Promise<string> {
   log(`  Location: ${dbPath}`);
   log(`  Kconfig symbols: ${kconfigCount}`);
   log(`  DT bindings: ${dtCount}`);
+  log(`  Samples: ${sampleCount}`);
   return dbPath;
 }
 
