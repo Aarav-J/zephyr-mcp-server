@@ -1,5 +1,5 @@
 {
-  "name": "@personalhermes/zephyr-mcp-server",
+  "name": "@aarav-j/zephyr-mcp-server",
   "version": "0.1.0",
   "description": "MCP server for Zephyr RTOS documentation - API signatures, Kconfig symbols, and Devicetree bindings",
   "type": "module",

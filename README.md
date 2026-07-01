@@ -4,6 +4,23 @@ An MCP (Model Context Protocol) server that gives LLMs grounded access to Zephyr
 
 ## Quick Start
 
+### Option 1: npx (no install)
+
+```json
+{
+  "mcpServers": {
+    "zephyr": {
+      "command": "npx",
+      "args": ["-y", "@aarav-j/zephyr-mcp-server"]
+    }
+  }
+}
+```
+
+First startup auto-downloads the server + pre-built index (8.5 MB). Zero setup.
+
+### Option 2: Clone from GitHub
+
 ```bash
 git clone https://github.com/Aarav-J/zephyr-mcp-server.git
 cd zephyr-mcp-server
@@ -18,13 +35,11 @@ Add to your MCP client config (e.g. `~/.cursor/mcp.json`):
   "mcpServers": {
     "zephyr": {
       "command": "node",
-      "args": ["/absolute/path/to/zephyr-mcp-server/dist/index.js"]
+      "args": ["/path/to/zephyr-mcp-server/dist/index.js"]
     }
   }
 }
 ```
-
-First startup auto-downloads a pre-built index (8.5 MB) with data from the latest Zephyr release. No manual setup needed.
 
 ## Tools
 

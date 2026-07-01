@@ -50,7 +50,7 @@ function loadLatestIndex(): void {
 // --- Server setup ---
 
 const server = new Server(
-  { name: "@personalhermes/zephyr-mcp-server", version: "0.1.0" },
+  { name: "@aarav-j/zephyr-mcp-server", version: "0.1.0" },
   { capabilities: { tools: {} } }
 );
 
