@@ -8,7 +8,7 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { ZephyrDatabase, getCacheDir, FunctionRow, KconfigRow, DtBindingRow } from "./db.js";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 // --- Database loading ---
@@ -441,17 +441,86 @@ async function checkLatestVersion(): Promise<string | null> {
 
 // --- Start ---
 
+async function downloadPrebuiltIndex(): Promise<ZephyrDatabase | null> {
+  const REPO = "Aarav-J/zephyr-mcp-server";
+  const RELEASES_API = `https://api.github.com/repos/${REPO}/releases/latest`;
+
+  try {
+    console.error("[download] Checking for pre-built index...");
+    const resp = await fetch(RELEASES_API, {
+      headers: { "Accept": "application/vnd.github.v3+json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!resp.ok) {
+      console.error(`[download] Failed to fetch release info: ${resp.status}`);
+      return null;
+    }
+
+    const data = (await resp.json()) as {
+      tag_name: string;
+      assets: { name: string; browser_download_url: string }[];
+    };
+
+    // Find the index asset
+    const asset = data.assets.find((a) => a.name.endsWith(".db"));
+    if (!asset) {
+      console.error("[download] No index asset found in latest release");
+      return null;
+    }
+
+    console.error(`[download] Downloading ${asset.name}...`);
+    const dbResp = await fetch(asset.browser_download_url, {
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!dbResp.ok) {
+      console.error(`[download] Download failed: ${dbResp.status}`);
+      return null;
+    }
+
+    const buffer = await dbResp.arrayBuffer();
+    const cacheDir = getCacheDir();
+    const versionDir = join(cacheDir, data.tag_name);
+    mkdirSync(versionDir, { recursive: true });
+    const dbPath = join(versionDir, "zephyr-index.db");
+    writeFileSync(dbPath, Buffer.from(buffer));
+
+    console.error(`[download] Saved index to ${dbPath}`);
+    const loaded = new ZephyrDatabase(dbPath);
+    const stored = loaded.getMeta("version");
+    if (stored) {
+      db = loaded;
+      currentVersion = stored;
+      console.error(`[download] Loaded index: ${stored}`);
+      return loaded;
+    }
+    loaded.close();
+    return null;
+  } catch (err) {
+    console.error(`[download] Error: ${err}`);
+    return null;
+  }
+}
+
+// --- Start ---
+
 async function main() {
+  // Try local cache first
   loadLatestIndex();
 
-  // Fire-and-forget version check (don't block startup)
+  // If no local index, download pre-built one
+  if (!db) {
+    console.error("No local index found. Attempting to download pre-built index...");
+    await downloadPrebuiltIndex();
+  }
+
+  // Fire-and-forget version check
   checkLatestVersion().then((latest) => {
     if (latest && currentVersion && latest !== currentVersion) {
       console.error(`[update] New Zephyr release: ${latest} (cached: ${currentVersion})`);
-      console.error(`[update] Run: npx tsx scripts/build-index.ts ${latest} --source /path/to/zephyr`);
+      console.error(`[update] Run: cd zephyr-mcp-server && npm run build-index ${latest}`);
     } else if (latest && !currentVersion) {
       console.error(`[update] Latest Zephyr release: ${latest}`);
-      console.error(`[update] Run: npx tsx scripts/build-index.ts ${latest} --source /path/to/zephyr`);
+      console.error(`[update] Run: cd zephyr-mcp-server && npm run build-index ${latest}`);
     } else if (latest && latest === currentVersion) {
       console.error(`[update] Index is up-to-date (${latest})`);
     }
@@ -463,7 +532,10 @@ async function main() {
   if (db) {
     console.error(`Active index: ${currentVersion}`);
   } else {
-    console.error("No index loaded. Run `npm run build-index` to build one.");
+    console.error("No index loaded.");
+    console.error("  If first run, the server should auto-download a pre-built index.");
+    console.error("  Otherwise, run: git clone https://github.com/Aarav-J/zephyr-mcp-server.git");
+    console.error("  Then: cd zephyr-mcp-server && npm install && npm run build");
   }
 }
 
