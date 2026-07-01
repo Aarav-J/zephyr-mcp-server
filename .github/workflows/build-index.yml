@@ -54,27 +54,26 @@ jobs:
 
       - name: Generate Doxygen XML
         run: |
-          cat > /tmp/doxyfile << 'ENDOFFILE'
-          PROJECT_NAME           = "Zephyr API"
-          OUTPUT_DIRECTORY       = /tmp/zephyr-doxygen
-          GENERATE_XML           = YES
-          GENERATE_HTML          = NO
-          GENERATE_LATEX         = NO
-          INPUT                  = /tmp/zephyr-src/include/zephyr
-          RECURSIVE              = YES
-          FILE_PATTERNS          = *.h
-          EXTRACT_ALL            = YES
-          EXTRACT_STATIC         = YES
-          SORT_MEMBER_DOCS       = YES
-          QUIET                  = YES
-          WARNINGS               = NO
-          WARN_IF_UNDOCUMENTED   = NO
-          WARN_NO_PARAMDOC       = NO
-          MACRO_EXPANSION        = YES
-          EXPAND_ONLY_PREDEF     = YES
-          PREDEFINED             = __syscall= __syscall_inline=
-          INCLUDE_PATH           = /tmp/zephyr-src/include
-ENDOFFILE
+          printf '%s\n' \
+            'PROJECT_NAME = "Zephyr API"' \
+            'OUTPUT_DIRECTORY = /tmp/zephyr-doxygen' \
+            'GENERATE_XML = YES' \
+            'GENERATE_HTML = NO' \
+            'GENERATE_LATEX = NO' \
+            'INPUT = /tmp/zephyr-src/include/zephyr' \
+            'RECURSIVE = YES' \
+            'FILE_PATTERNS = *.h' \
+            'EXTRACT_ALL = YES' \
+            'EXTRACT_STATIC = YES' \
+            'QUIET = YES' \
+            'WARNINGS = NO' \
+            'WARN_IF_UNDOCUMENTED = NO' \
+            'WARN_NO_PARAMDOC = NO' \
+            'MACRO_EXPANSION = YES' \
+            'EXPAND_ONLY_PREDEF = YES' \
+            'PREDEFINED = __syscall= __syscall_inline=' \
+            'INCLUDE_PATH = /tmp/zephyr-src/include' \
+            > /tmp/doxyfile
           doxygen /tmp/doxyfile
 
       - name: Build index
@@ -104,7 +103,7 @@ ENDOFFILE
             Auto-built index for Zephyr ${{ steps.version.outputs.tag }}.
 
             Includes:
-            - $(ls /tmp/zephyr-doxygen/xml/*.xml 2>/dev/null | wc -l) function signatures from Doxygen
+            - Function signatures from Doxygen
             - Kconfig symbols
             - Devicetree bindings
             - Sample app configurations
