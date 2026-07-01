@@ -8,13 +8,13 @@ import { join, relative } from "node:path";
 import { KconfigRow } from "../db.js";
 
 const CONFIG_RE = /^config\s+(\w+)/m;
-const TYPE_RE = /^\s+(bool|string|int|hex|tristate)\s*(.*)$/m;
-const PROMPT_RE = /^\s+prompt\s+"(.+?)"/m;
-const DEFAULT_RE = /^\s+default\s+(.+?)(?:\s+if\s+.+)?$/m;
-const DEPENDS_RE = /^\s+depends\s+on\s+(.+)$/m;
-const SELECT_RE = /^\s+select\s+(\w+)/m;
-const RANGE_RE = /^\s+range\s+(\S+)\s+(\S+)/m;
-const HELP_RE = /^\s+help$/m;
+const TYPE_RE = /^\s*(bool|string|int|hex|tristate)\s*(.*)$/m;
+const PROMPT_RE = /^\s*prompt\s+"(.+?)"/m;
+const DEFAULT_RE = /^\s*default\s+(.+?)(?:\s+if\s+.+)?$/m;
+const DEPENDS_RE = /^\s*depends\s+on\s+(.+)$/m;
+const SELECT_RE = /^\s*select\s+(\w+)/m;
+const RANGE_RE = /^\s*range\s+(\S+)\s+(\S+)/m;
+const HELP_RE = /^\s*help$/m;
 const SOURCE_RE = /^source\s+\"(.+?)\"/m;
 const MENU_RE = /^(menu|if|choice|endmenu|endif|endchoice)\b/m;
 
@@ -117,25 +117,15 @@ export function parseKconfigFile(
         // Depends on
         const dependsMatch = attrLine.match(DEPENDS_RE);
         if (dependsMatch) {
-          // Parse dep chain: e.g. "DEP1 && DEP2"
           const deps = dependsMatch[1]
             .split(/&&|\|\|/)
-            .map((d) => d.trim())
-            .filter((d) => d.startsWith("CONFIG_") || d.startsWith("!"))
-            .map((d) => d.replace(/^!/, ""));
+            .map((d: string) => d.trim().replace(/^!/, ""))
+            .filter((d: string) => d.length > 0 && d !== "y" && d !== "n")
+            .map((d: string) => (d.startsWith("CONFIG_") ? d : `CONFIG_${d}`));
           dependsOn.push(...deps);
           i++;
           continue;
         }
-
-        // Select
-        const selectMatch = attrLine.match(SELECT_RE);
-        if (selectMatch) {
-          selects.push(`CONFIG_${selectMatch[1]}`);
-          i++;
-          continue;
-        }
-
         // Range
         const rangeMatch = attrLine.match(RANGE_RE);
         if (rangeMatch) {

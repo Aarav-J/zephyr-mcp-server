@@ -351,10 +351,22 @@ export class ZephyrDatabase {
     return row?.value;
   }
 
-  /** Add FTS5 prefix wildcard to last token if none present. */
+  /** Add FTS5 prefix wildcard to last token, and escape special characters. */
   private ftsQuery(query: string): string {
     const trimmed = query.trim();
-    if (trimmed.endsWith("*") || trimmed.includes('"')) return trimmed;
+    if (trimmed.length === 0) return query;
+
+    // Already escaped as a phrase or has wildcard — return as-is
+    if (trimmed.endsWith("*") || (trimmed.startsWith('"') && trimmed.endsWith('"'))) {
+      return trimmed;
+    }
+
+    // If query contains special FTS5 chars (,, , (, ), NEAR, etc.), treat as phrase
+    if (/[,()]/.test(trimmed)) {
+      return `"${trimmed}"`;
+    }
+
+    // Add prefix wildcard to last token
     const tokens = trimmed.split(/\s+/);
     if (tokens.length === 0) return query;
     tokens[tokens.length - 1] = tokens[tokens.length - 1] + "*";
@@ -368,6 +380,13 @@ export class ZephyrDatabase {
       .prepare("SELECT * FROM functions WHERE name = ? ORDER BY id LIMIT 1")
       .get(name) as FunctionRow | undefined;
   }
+
+  getBindingByCompatible(compatible: string): DtBindingRow | undefined {
+    return this.db
+      .prepare("SELECT * FROM dt_bindings WHERE compatible = ? ORDER BY id LIMIT 1")
+      .get(compatible) as DtBindingRow | undefined;
+  }
+
 
   searchFunctions(query: string, limit = 10): FunctionRow[] {
     const fts = this.ftsQuery(query);

@@ -7,7 +7,7 @@ import {
   ErrorCode,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
-import { ZephyrDatabase, getCacheDir, FunctionRow } from "./db.js";
+import { ZephyrDatabase, getCacheDir, FunctionRow, KconfigRow, DtBindingRow } from "./db.js";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -25,7 +25,7 @@ function loadLatestIndex(): void {
     .filter((e) => e.isDirectory())
     .map((e) => e.name)
     .sort()
-    .reverse(); // newest first
+    .reverse();
 
   for (const ver of versionDirs) {
     const dbPath = join(cacheDir, ver, "zephyr-index.db");
@@ -41,7 +41,6 @@ function loadLatestIndex(): void {
         }
         candidate.close();
       } catch {
-        // corrupt index, try next
         continue;
       }
     }
@@ -77,47 +76,124 @@ const GET_FUNCTION_SIGNATURE_TOOL = {
   },
 };
 
+const FIND_KCONFIG_TOOL = {
+  name: "find_kconfig",
+  description:
+    "Search Zephyr Kconfig symbols by name or description. Returns matching symbols with their type, prompt, default value, and dependency chain.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      pattern: {
+        type: "string",
+        description: "Search pattern (e.g. GPIO, CONFIG_I2C, USB)",
+      },
+      limit: {
+        type: "number",
+        description: "Maximum results. Default 10, max 50.",
+        default: 10,
+      },
+      version: {
+        type: "string",
+        description: "Zephyr version tag. Defaults to latest cached.",
+      },
+    },
+    required: ["pattern"],
+  },
+};
+
+const GET_DT_BINDING_TOOL = {
+  name: "get_dt_binding",
+  description:
+    "Look up a Devicetree binding by compatible string. Returns the binding schema including required and optional properties, bus information, and child bindings.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      compatible: {
+        type: "string",
+        description: "Devicetree compatible string (e.g. st,stm32-i2c, arm,cortex-m4)",
+      },
+      version: {
+        type: "string",
+        description: "Zephyr version tag. Defaults to latest cached.",
+      },
+    },
+    required: ["compatible"],
+  },
+};
+
+const SEARCH_DOCS_TOOL = {
+  name: "search_docs",
+  description:
+    "Full-text search across Zephyr documentation, API reference, Kconfig help text, and DT binding descriptions.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      query: {
+        type: "string",
+        description: "Search query (e.g. 'semaphore timeout', 'gpio interrupt', 'i2c stm32')",
+      },
+      domain: {
+        type: "string",
+        description: "Scope: 'api', 'kconfig', 'dt', or omit for all",
+        enum: ["api", "kconfig", "dt"],
+      },
+      limit: {
+        type: "number",
+        description: "Maximum results. Default 10, max 30.",
+        default: 10,
+      },
+      version: {
+        type: "string",
+        description: "Zephyr version tag. Defaults to latest cached.",
+      },
+    },
+    required: ["query"],
+  },
+};
+
 // --- Request handlers ---
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [GET_FUNCTION_SIGNATURE_TOOL],
+  tools: [
+    GET_FUNCTION_SIGNATURE_TOOL,
+    FIND_KCONFIG_TOOL,
+    GET_DT_BINDING_TOOL,
+    SEARCH_DOCS_TOOL,
+  ],
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const tool = request.params.name;
   const args = request.params.arguments ?? {};
 
+  if (!db) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              error: "No index loaded.",
+              hint: "Run `npx tsx scripts/build-index.ts --source /path/to/zephyr` to build the index first.",
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  }
+
   switch (tool) {
+    // --- get_function_signature ---
     case "get_function_signature": {
       const name = String(args.name ?? "");
       if (!name) {
-        throw new McpError(
-          ErrorCode.InvalidParams,
-          "Missing required argument: name"
-        );
-      }
-
-      if (!db) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                {
-                  name,
-                  error: "No index loaded. Run `npm run build-index` to build the Zephyr docs index first.",
-                },
-                null,
-                2
-              ),
-            },
-          ],
-        };
+        throw new McpError(ErrorCode.InvalidParams, "Missing required argument: name");
       }
 
       const fn = db.getFunctionByName(name);
       if (!fn) {
-        // Try prefix search via FTS
         const results = db.searchFunctions(name, 5);
         return {
           content: [
@@ -168,11 +244,178 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       };
     }
 
+    // --- find_kconfig ---
+    case "find_kconfig": {
+      const pattern = String(args.pattern ?? "");
+      if (!pattern) {
+        throw new McpError(ErrorCode.InvalidParams, "Missing required argument: pattern");
+      }
+
+      const limit = Math.min(Math.max(Number(args.limit ?? 10), 1), 50);
+      const results = db.searchKconfig(pattern, limit);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                pattern,
+                found: results.length > 0,
+                count: results.length,
+                results: results.map((r: KconfigRow) => ({
+                  name: r.name,
+                  type: r.type,
+                  prompt: r.prompt,
+                  default: r.default_val,
+                  depends_on: r.depends_on ? JSON.parse(r.depends_on) : [],
+                  path: r.path,
+                })),
+                version: currentVersion,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+
+    // --- get_dt_binding ---
+    case "get_dt_binding": {
+      const compatible = String(args.compatible ?? "");
+      if (!compatible) {
+        throw new McpError(ErrorCode.InvalidParams, "Missing required argument: compatible");
+      }
+
+      // Try exact match first (avoids FTS5 comma syntax issues)
+      let binding = db.getBindingByCompatible(compatible);
+
+      if (!binding) {
+        // Fall back to FTS search
+        const results = db.searchBindings(compatible, 5);
+        binding = results.find((r: DtBindingRow) => r.compatible === compatible) ?? results[0] ?? null;
+      }
+
+      if (!binding) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  compatible,
+                  found: false,
+                  suggestions: [],
+                  version: currentVersion,
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                compatible: binding.compatible,
+                description: binding.description,
+                properties: binding.properties ? JSON.parse(binding.properties) : null,
+                child_binding: binding.child_binding ? JSON.parse(binding.child_binding) : null,
+                bus: binding.bus,
+                on_bus: binding.on_bus,
+                path: binding.path,
+                version: currentVersion,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+
+    // --- search_docs ---
+    case "search_docs": {
+      const query = String(args.query ?? "");
+      if (!query) {
+        throw new McpError(ErrorCode.InvalidParams, "Missing required argument: query");
+      }
+
+      const domain = String(args.domain ?? "");
+      const limit = Math.min(Math.max(Number(args.limit ?? 10), 1), 30);
+
+      type SearchResult = {
+        domain: string;
+        title: string;
+        snippet: string;
+        path?: string;
+      };
+
+      const allResults: SearchResult[] = [];
+
+      if (!domain || domain === "api") {
+        const fnResults = db.searchFunctions(query, limit);
+        for (const r of fnResults as FunctionRow[]) {
+          allResults.push({
+            domain: "api",
+            title: r.name,
+            snippet: r.signature,
+            path: r.header ?? undefined,
+          });
+        }
+      }
+
+      if (!domain || domain === "kconfig") {
+        const kcResults = db.searchKconfig(query, limit);
+        for (const r of kcResults as KconfigRow[]) {
+          allResults.push({
+            domain: "kconfig",
+            title: r.name,
+            snippet: r.prompt ?? r.help_text ?? "",
+            path: r.path ?? undefined,
+          });
+        }
+      }
+
+      if (!domain || domain === "dt") {
+        const dtResults = db.searchBindings(query, limit);
+        for (const r of dtResults as DtBindingRow[]) {
+          allResults.push({
+            domain: "dt",
+            title: r.compatible,
+            snippet: r.description ?? "",
+            path: r.path ?? undefined,
+          });
+        }
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                query,
+                count: allResults.length,
+                results: allResults.slice(0, limit),
+                version: currentVersion,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    }
+
     default:
-      throw new McpError(
-        ErrorCode.MethodNotFound,
-        `Unknown tool: ${tool}`
-      );
+      throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${tool}`);
   }
 });
 
@@ -185,8 +428,6 @@ async function main() {
   console.error("Zephyr MCP server started on stdio");
   if (db) {
     console.error(`Active index: ${currentVersion}`);
-    const fnCount = 1; // will add proper count from meta later
-    console.error(`  Functions: ${fnCount} entries`);
   } else {
     console.error("No index loaded. Run `npm run build-index` to build one.");
   }
