@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<doxygen version="1.12.0">
+  <compounddef kind="group" id="group__semaphore">
+    <compoundname>semaphore</compoundname>
+    <title>Semaphores</title>
+    <sectiondef kind="func">
+      <memberdef kind="function" id="group__semaphore_1ga42f7c2c8ad233e9f3c0d5f0c8c5e723b" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <name>k_sem_init</name>
+        <argsstring>(struct k_sem *sem, unsigned int initial_count, unsigned int limit)</argsstring>
+        <param>
+          <type>struct k_sem *</type>
+          <declname>sem</declname>
+          <briefdescription><para>Semaphore object.</para></briefdescription>
+        </param>
+        <param>
+          <type>unsigned int</type>
+          <declname>initial_count</declname>
+          <briefdescription><para>Initial semaphore count.</para></briefdescription>
+        </param>
+        <param>
+          <type>unsigned int</type>
+          <declname>limit</declname>
+          <briefdescription><para>Maximum semaphore count.</para></briefdescription>
+        </param>
+        <briefdescription>
+          <para>Initialize a semaphore.</para>
+        </briefdescription>
+        <detaileddescription>
+          <para>Initialize a semaphore object, setting its initial count and count limit.</para>
+        </detaileddescription>
+        <location file="kernel/sem.c" line="42" column="1" declfile="include/zephyr/kernel.h" declline="123" declcolumn="1"/>
+      </memberdef>
+      <memberdef kind="function" id="group__semaphore_1gac04e9b9b5e9b5e9c5e9b5e9b5e9c5e9b" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <name>k_sem_take</name>
+        <argsstring>(struct k_sem *sem, k_timeout_t timeout)</argsstring>
+        <param>
+          <type>struct k_sem *</type>
+          <declname>sem</declname>
+          <briefdescription><para>Semaphore object.</para></briefdescription>
+        </param>
+        <param>
+          <type>k_timeout_t</type>
+          <declname>timeout</declname>
+          <briefdescription><para>Timeout value.</para></briefdescription>
+        </param>
+        <briefdescription>
+          <para>Take a semaphore, pend if not available.</para>
+        </briefdescription>
+        <detaileddescription>
+          <para>This routine takes <emphasis>sem</emphasis>, waiting if needed up to <emphasis>timeout</emphasis> units of time.</para>
+        </detaileddescription>
+        <location file="kernel/sem.c" line="98" column="1" declfile="include/zephyr/kernel.h" declline="456" declcolumn="1"/>
+      </memberdef>
+      <memberdef kind="function" id="group__semaphore_1ga1234567890abcdef1234567890abcdef" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <name>k_sem_give</name>
+        <argsstring>(struct k_sem *sem)</argsstring>
+        <param>
+          <type>struct k_sem *</type>
+          <declname>sem</declname>
+          <briefdescription><para>Semaphore object.</para></briefdescription>
+        </param>
+        <briefdescription>
+          <para>Give a semaphore.</para>
+        </briefdescription>
+        <detaileddescription>
+          <para>This routine gives <emphasis>sem</emphasis>, unlocking a thread waiting on it.</para>
+        </detaileddescription>
+        <location file="kernel/sem.c" line="142" column="1" declfile="include/zephyr/kernel.h" declline="457" declcolumn="1"/>
+      </memberdef>
+    </sectiondef>
+  </compounddef>
+</doxygen>

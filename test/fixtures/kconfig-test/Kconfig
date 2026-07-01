@@ -1,0 +1,35 @@
+# GPIO configuration
+menu "GPIO"
+
+config GPIO
+	bool "GPIO support"
+	default y
+	help
+	  Enable GPIO driver support.
+	  This enables the GPIO subsystem.
+
+if GPIO
+
+config GPIO_STM32
+	bool "STM32 GPIO driver"
+	default n
+	depends on GPIO
+
+config GPIO_NRF
+	bool "nRF GPIO driver"
+	default n
+	depends on GPIO && CLOCK_CONTROL
+
+endif # GPIO
+
+config I2C
+	bool "I2C support"
+	default n
+	select SERIAL
+
+config I2C_STM32
+	bool "STM32 I2C driver"
+	default n
+	depends on I2C
+	help
+	  Enable STM32 I2C controller driver.
